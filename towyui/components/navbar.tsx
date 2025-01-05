@@ -1,23 +1,64 @@
-import Link from "next/link"
+'use client';
 
-export function Navbar() {
+import Link from "next/link"
+import { Button } from "./ui/button"
+import { useAuth } from "@/contexts/AuthContext"
+import { authService } from "@/services/api"
+import { useRouter } from "next/navigation"
+
+export default function Navbar() {
+  const { user, setUser, isLoading } = useAuth()
+  console.log('Navbar render - User:', user, 'isLoading:', isLoading) // Debug log
+  const router = useRouter()
+
+  const handleLogout = () => {
+    authService.logout()
+    setUser(null)
+    router.push('/')
+  }
+
+  if (isLoading) {
+    return null; // or a loading spinner
+  }
+
   return (
-    <nav className="fixed w-full bg-white shadow-md z-50">
-      <div className="container mx-auto px-8 py-4 flex justify-between items-center">
-        <div className="pl-12">
-          <Link href="/" className="text-3xl font-bold text-black">
+    <nav className="fixed w-full bg-white z-50 shadow-sm">
+      <div className="container mx-auto px-4">
+        <div className="flex items-center justify-between h-16">
+          <Link href="/" className="text-2xl font-bold text-white-600">
             TOWY
           </Link>
-        </div>
-
-        <div className="flex gap-8">
-          <Link href="/" className="text-black">Home</Link>
-          <Link href="/about" className="text-black">About</Link>
-          <Link href="/services" className="text-black">Services</Link>
-          <Link href="/contact" className="text-black">Contact</Link>
+          <div className="flex items-center gap-4">
+            <Link href="/" className="hover:text-green-600">Home</Link>
+            <Link href="/about" className="hover:text-green-600">About</Link>
+            <Link href="/services" className="hover:text-green-600">Services</Link>
+            <Link href="/contact" className="hover:text-green-600">Contact</Link>
+            <div className="ml-4 flex items-center gap-4">
+              {user ? (
+                <div className="flex items-center gap-4">
+                  <span className="font-medium">Welcome, {user.name}!</span>
+                  <Button 
+                    variant="outline" 
+                    onClick={handleLogout}
+                    className="text-red-600 hover:text-red-700"
+                  >
+                    Logout
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <Button variant="outline" asChild>
+                    <Link href="/login">Login</Link>
+                  </Button>
+                  <Button asChild className="bg-green-600 hover:bg-green-700">
+                    <Link href="/signup">Sign Up</Link>
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </nav>
   )
 }
-
