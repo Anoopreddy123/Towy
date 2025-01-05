@@ -21,7 +21,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Custom setUser function that also updates localStorage
   const handleSetUser = (newUser: User | null) => {
     setUser(newUser);
     if (newUser) {
@@ -31,12 +30,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Initialize user from localStorage
   useEffect(() => {
     try {
       if (typeof window !== 'undefined') {
         const storedUser = localStorage.getItem('user');
-        console.log('Stored user:', storedUser); // Debug log
         if (storedUser) {
           setUser(JSON.parse(storedUser));
         }
@@ -48,16 +45,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const value = {
-    user,
-    setUser: handleSetUser,
-    isLoading
-  };
-
-  console.log('AuthProvider render - User:', user, 'isLoading:', isLoading); // Debug log
-
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider value={{ user, setUser: handleSetUser, isLoading }}>
       {children}
     </AuthContext.Provider>
   );

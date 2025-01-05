@@ -8,7 +8,6 @@ import { useRouter } from "next/navigation"
 
 export default function Navbar() {
   const { user, setUser, isLoading } = useAuth()
-  console.log('Navbar render - User:', user, 'isLoading:', isLoading) // Debug log
   const router = useRouter()
 
   const handleLogout = () => {
@@ -18,7 +17,7 @@ export default function Navbar() {
   }
 
   if (isLoading) {
-    return null; // or a loading spinner
+    return null;
   }
 
   return (

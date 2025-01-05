@@ -1,8 +1,4 @@
-import dynamic from 'next/dynamic'
-
-const SignupForm = dynamic(() => import('@/components/signup-form'), {
-  ssr: false
-})
+import SignupForm from "@/components/signup-form"
 
 export default function SignupPage() {
   return (

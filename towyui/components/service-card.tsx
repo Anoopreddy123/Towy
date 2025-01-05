@@ -30,4 +30,3 @@ export function ServiceCard({ title, description, image, href }: {
     </div>
   )
 }
-
