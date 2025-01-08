@@ -2,82 +2,109 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { AxiosError } from "axios"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { authService } from "@/services/api"
+import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/contexts/AuthContext"
+import { authService } from "@/services/api"
 
-export default function LoginForm() {
-  const router = useRouter()
-  const { setUser } = useAuth()
-  const [formData, setFormData] = useState({
-    email: "",
-    password: "",
-  })
-  const [error, setError] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
+export function LoginForm() {
+    const [isLoading, setIsLoading] = useState(false)
+    const router = useRouter()
+    const { toast } = useToast()
+    const { setUser } = useAuth()
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError("")
-    setIsLoading(true)
+    const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault()
+        setIsLoading(true)
 
-    try {
-      const response = await authService.login({
-        email: formData.email,
-        password: formData.password,
-      })
-      
-      console.log('Login response:', response)
-      setUser(response.user)
-      console.log('User set in context:', response.user)
-      router.push('/')
-    } catch (error: unknown) {
-      if (error instanceof AxiosError) {
-        console.error('Login error details:', error.response?.data)
-        setError(error.response?.data?.message || 'Login failed')
-      } else {
-        console.error('Unexpected error:', error)
-        setError('An unexpected error occurred')
-      }
-    } finally {
-      setIsLoading(false)
+        try {
+            const formData = new FormData(event.currentTarget)
+            const credentials = {
+                email: formData.get('email') as string,
+                password: formData.get('password') as string,
+            }
+            
+            console.log('Submitting credentials:', credentials);
+            
+            const response = await authService.login(credentials)
+            console.log('Login response:', response);
+
+            setUser(response.user)
+            router.push(response.user.role === 'provider' ? '/provider/dashboard' : '/dashboard')
+        } catch (error) {
+            console.error('Login error:', error);
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: error instanceof Error ? error.message : "Invalid email or password",
+            })
+        } finally {
+            setIsLoading(false)
+        }
     }
-  }
 
-  return (
-    <div className="w-full max-w-md p-6 bg-white rounded-lg shadow-md">
-      <h1 className="text-2xl font-bold mb-6">Login to TOWY</h1>
-      {error && <p className="text-red-500 mb-4">{error}</p>}
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <Label htmlFor="email">Email</Label>
-          <Input
-            id="email"
-            type="email"
-            placeholder="Enter your email"
-            value={formData.email}
-            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-            required
-          />
+    const loginAsProvider = async () => {
+        setIsLoading(true)
+        try {
+            const response = await authService.login({
+                email: "anoopreddy51@gmail.com", // Your provider email
+                password: "password123",
+            })
+
+            setUser(response.user)
+            router.push('/provider/dashboard')
+        } catch (error) {
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: "Failed to login as provider",
+            })
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    return (
+        <div className="mx-auto max-w-sm space-y-8">
+            <div className="space-y-2 text-center">
+                <h1 className="text-3xl font-bold">Welcome Back</h1>
+                <p className="text-gray-500">Enter your credentials to access your account</p>
+            </div>
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="space-y-2">
+                    <Input
+                        name="email"
+                        placeholder="Email"
+                        required
+                        type="email"
+                    />
+                </div>
+                <div className="space-y-2">
+                    <Input
+                        name="password"
+                        placeholder="Password"
+                        required
+                        type="password"
+                    />
+                </div>
+                <Button
+                    className="w-full bg-green-600 hover:bg-green-700"
+                    disabled={isLoading}
+                >
+                    {isLoading ? "Signing in..." : "Sign In"}
+                </Button>
+            </form>
+            <div className="text-center">
+                <Button
+                    variant="outline"
+                    onClick={loginAsProvider}
+                    disabled={isLoading}
+                    className="w-full"
+                >
+                    Login as Provider (Demo)
+                </Button>
+            </div>
         </div>
-        <div>
-          <Label htmlFor="password">Password</Label>
-          <Input
-            id="password"
-            type="password"
-            placeholder="Enter your password"
-            value={formData.password}
-            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-            required
-          />
-        </div>
-        <Button type="submit" className="w-full" disabled={isLoading}>
-          {isLoading ? "Logging in..." : "Login"}
-        </Button>
-      </form>
-    </div>
-  )
+    )
 } 

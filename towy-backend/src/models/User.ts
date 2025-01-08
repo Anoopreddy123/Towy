@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from "typeorm";
+import { Entity, PrimaryGeneratedColumn, Column } from "typeorm";
 
 @Entity()
 export class User {
@@ -16,14 +16,45 @@ export class User {
 
     @Column({
         type: "enum",
-        enum: ["customer", "mechanic", "admin"],
+        enum: ["customer", "provider", "admin"],
         default: "customer"
     })
     role!: string;
 
-    @CreateDateColumn()
-    createdAt!: Date;
+    @Column({
+        type: 'point',
+        nullable: true,
+        transformer: {
+            to: (value: { lat: number; lng: number } | null) => {
+                if (!value) return null;
+                return `(${value.lng},${value.lat})`;
+            },
+            from: (value: any) => {
+                if (!value) return null;
+                // Handle both string and object formats
+                if (typeof value === 'string') {
+                    const [lng, lat] = value.slice(1, -1).split(',').map(Number);
+                    return { lat, lng };
+                }
+                // Handle PostgreSQL point format
+                if (value.x !== undefined && value.y !== undefined) {
+                    return { lat: value.y, lng: value.x };
+                }
+                return null;
+            }
+        }
+    })
+    location?: { lat: number; lng: number };
 
-    @UpdateDateColumn()
-    updatedAt!: Date;
+    @Column('simple-array', { nullable: true })
+    services?: string[];
+
+    @Column({ nullable: true })
+    phoneNumber?: string;
+
+    @Column({ nullable: true })
+    businessName?: string;
+
+    @Column({ default: true })
+    isAvailable!: boolean;
 } 

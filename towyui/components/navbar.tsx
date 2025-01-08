@@ -30,7 +30,24 @@ export default function Navbar() {
           <div className="flex items-center gap-4">
             <Link href="/" className="hover:text-green-600">Home</Link>
             <Link href="/about" className="hover:text-green-600">About</Link>
-            <Link href="/services" className="hover:text-green-600">Services</Link>
+            {user && (
+                <>
+                    <Link 
+                        href={user.role === 'provider' ? '/provider/dashboard' : '/dashboard'} 
+                        className="hover:text-green-600"
+                    >
+                        Dashboard
+                    </Link>
+                    {user.role === 'customer' && (
+                        <Link 
+                            href="/request-service" 
+                            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md"
+                        >
+                            Request Service
+                        </Link>
+                    )}
+                </>
+            )}
             <Link href="/contact" className="hover:text-green-600">Contact</Link>
             <div className="ml-4 flex items-center gap-4">
               {user ? (

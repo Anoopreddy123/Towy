@@ -1,17 +1,34 @@
 import { Router } from 'express';
 import { 
-    createServiceRequest, 
-    getUserServiceRequests, 
+    createServiceRequest,
+    getAvailableProviders,
+    getUserRequests,
     updateServiceStatus,
-    getServiceRequestById 
+    submitQuote,
+    getServiceQuotes,
+    acceptQuote,
+    getProviderServices,
+    findNearbyProviders,
+    notifyProvider,
+    getServiceRequest,
+    getNearbyRequests
 } from '../controllers/serviceController';
 import { authenticateToken } from '../middleware/auth';
 
 const router = Router();
 
-router.post('/', authenticateToken, createServiceRequest);
-router.get('/user', authenticateToken, getUserServiceRequests);
-router.get('/:id', authenticateToken, getServiceRequestById);
-router.patch('/:id/status', authenticateToken, updateServiceStatus);
+// Service request routes
+router.post('/request', authenticateToken, createServiceRequest);
+router.get('/providers', authenticateToken, getAvailableProviders);
+router.get('/user-requests', authenticateToken, getUserRequests);
+router.patch('/request/:id/status', authenticateToken, updateServiceStatus);
+router.post('/request/:serviceId/quote', authenticateToken, submitQuote);
+router.get('/request/:serviceId/quotes', authenticateToken, getServiceQuotes);
+router.post('/request/:serviceId/accept-quote', authenticateToken, acceptQuote);
+router.get('/provider/services', authenticateToken, getProviderServices);
+router.get('/nearby-providers', authenticateToken, findNearbyProviders);
+router.post('/notify-provider', authenticateToken, notifyProvider);
+router.get('/request/:id', authenticateToken, getServiceRequest);
+router.get('/nearby-requests', authenticateToken, getNearbyRequests);
 
 export const serviceRouter = router; 

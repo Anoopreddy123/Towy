@@ -1,9 +1,9 @@
-import SignupForm from "@/components/signup-form"
+import { SignupForm } from "@/components/signup-form"
 
 export default function SignupPage() {
-  return (
-    <div className="min-h-screen flex items-center justify-center">
-      <SignupForm />
-    </div>
-  )
+    return (
+        <div className="container mx-auto py-20">
+            <SignupForm />
+        </div>
+    )
 } 
