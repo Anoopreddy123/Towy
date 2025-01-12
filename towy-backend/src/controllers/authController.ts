@@ -57,12 +57,26 @@ export const signup = async (req: Request, res: Response): Promise<void> => {
 
 export const login = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { email, password } = req.body;
-
-        // Find user
+        const { email, password, role } = req.body;
+        
+        // Find user with all necessary fields
         const user = await userRepository.findOne({ 
-            where: { email },
-            select: ['id', 'email', 'password', 'name', 'role', 'businessName', 'phoneNumber', 'services', 'location', 'isAvailable'] 
+            where: { 
+                email,
+                ...(role && { role })
+            },
+            select: [
+                'id',
+                'email', 
+                'password',
+                'name',
+                'role',
+                'businessName',
+                'phoneNumber',
+                'services',
+                'location',
+                'isAvailable'
+            ]
         });
 
         if (!user) {
@@ -70,16 +84,14 @@ export const login = async (req: Request, res: Response): Promise<void> => {
             return;
         }
 
-        // Verify password
-        const isValidPassword = await compare(password, user.password);
-        if (!isValidPassword) {
+        const validPassword = await compare(password, user.password);
+        if (!validPassword) {
             res.status(401).json({ message: "Invalid credentials" });
             return;
         }
 
-        // Create JWT token
         const token = sign(
-            { userId: user.id },
+            { userId: user.id, role: user.role },
             process.env.JWT_SECRET || 'your-secret-key',
             { expiresIn: '24h' }
         );
@@ -88,6 +100,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         const { password: _, ...userWithoutPassword } = user;
 
         res.json({
+            message: "Login successful",
             token,
             user: userWithoutPassword
         });

@@ -31,7 +31,7 @@ export const authService = {
         return response.json();
     },
 
-    login: async (credentials: { email: string; password: string }) => {
+    login: async (credentials: { email: string; password: string; role?: string }) => {
         console.log('Attempting login with:', credentials);
         
         const response = await fetch(`${API_URL}/auth/login`, {
@@ -48,10 +48,20 @@ export const authService = {
         }
 
         const data = await response.json();
-        console.log('Login response:', data);
+        console.log('Login response data:', data);
         
         if (data.token) {
             localStorage.setItem('token', data.token);
+            localStorage.setItem('user', JSON.stringify({
+                id: data.user.id,
+                name: data.user.name,
+                email: data.user.email,
+                role: data.user.role,
+                businessName: data.user.businessName,
+                phoneNumber: data.user.phoneNumber,
+                services: data.user.services
+            }));
+            localStorage.setItem('userRole', data.user.role);
         }
         
         return data;

@@ -4,107 +4,91 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { useToast } from "@/hooks/use-toast"
-import { useAuth } from "@/contexts/AuthContext"
+import { Label } from "@/components/ui/label"
 import { authService } from "@/services/api"
 
 export function LoginForm() {
-    const [isLoading, setIsLoading] = useState(false)
-    const router = useRouter()
-    const { toast } = useToast()
-    const { setUser } = useAuth()
+  const router = useRouter()
+  const [isLoading, setIsLoading] = useState(false)
 
-    const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-        event.preventDefault()
-        setIsLoading(true)
+  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setIsLoading(true)
 
-        try {
-            const formData = new FormData(event.currentTarget)
-            const credentials = {
-                email: formData.get('email') as string,
-                password: formData.get('password') as string,
-            }
-            
-            console.log('Submitting credentials:', credentials);
-            
-            const response = await authService.login(credentials)
-            console.log('Login response:', response);
+    const formData = new FormData(event.currentTarget)
+    const email = formData.get("email") as string
+    const password = formData.get("password") as string
 
-            setUser(response.user)
-            router.push(response.user.role === 'provider' ? '/provider/dashboard' : '/dashboard')
-        } catch (error) {
-            console.error('Login error:', error);
-            toast({
-                variant: "destructive",
-                title: "Error",
-                description: error instanceof Error ? error.message : "Invalid email or password",
-            })
-        } finally {
-            setIsLoading(false)
-        }
+    try {
+      const response = await authService.login({ email, password })
+      console.log("Login response:", response)
+      
+      window.location.href = response.user.role === 'provider' 
+        ? '/provider/dashboard' 
+        : '/dashboard'
+    } catch (error) {
+      console.error('Login failed:', error)
+    } finally {
+      setIsLoading(false)
     }
+  }
 
-    const loginAsProvider = async () => {
-        setIsLoading(true)
-        try {
-            const response = await authService.login({
-                email: "anoopreddy51@gmail.com", // Your provider email
-                password: "password123",
-            })
-
-            setUser(response.user)
-            router.push('/provider/dashboard')
-        } catch (error) {
-            toast({
-                variant: "destructive",
-                title: "Error",
-                description: "Failed to login as provider",
-            })
-        } finally {
-            setIsLoading(false)
-        }
+  const loginAsProvider = async () => {
+    setIsLoading(true)
+    try {
+      const response = await authService.login({ 
+        email: "anoopreddy51@gmail.com", 
+        password: "password123",
+        role: "provider"
+      })
+      console.log("Provider login response:", response)
+      
+      window.location.href = '/provider/dashboard'
+    } catch (error) {
+      console.error('Provider login failed:', error)
+    } finally {
+      setIsLoading(false)
     }
+  }
 
-    return (
-        <div className="mx-auto max-w-sm space-y-8">
-            <div className="space-y-2 text-center">
-                <h1 className="text-3xl font-bold">Welcome Back</h1>
-                <p className="text-gray-500">Enter your credentials to access your account</p>
-            </div>
-            <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="space-y-2">
-                    <Input
-                        name="email"
-                        placeholder="Email"
-                        required
-                        type="email"
-                    />
-                </div>
-                <div className="space-y-2">
-                    <Input
-                        name="password"
-                        placeholder="Password"
-                        required
-                        type="password"
-                    />
-                </div>
-                <Button
-                    className="w-full bg-green-600 hover:bg-green-700"
-                    disabled={isLoading}
-                >
-                    {isLoading ? "Signing in..." : "Sign In"}
-                </Button>
-            </form>
-            <div className="text-center">
-                <Button
-                    variant="outline"
-                    onClick={loginAsProvider}
-                    disabled={isLoading}
-                    className="w-full"
-                >
-                    Login as Provider (Demo)
-                </Button>
-            </div>
+  return (
+    <div className="w-full max-w-md mx-auto space-y-8">
+      <div className="text-center">
+        <h2 className="text-2xl font-bold">Login</h2>
+        <p className="text-gray-600 mt-2">Enter your credentials to access your account</p>
+      </div>
+
+      <form onSubmit={onSubmit} className="space-y-4">
+        <div>
+          <Label htmlFor="email">Email</Label>
+          <Input id="email" name="email" type="email" required />
         </div>
-    )
+        <div>
+          <Label htmlFor="password">Password</Label>
+          <Input id="password" name="password" type="password" required />
+        </div>
+        <Button type="submit" className="w-full bg-green-600 hover:bg-green-700" disabled={isLoading}>
+          {isLoading ? "Logging in..." : "Login"}
+        </Button>
+      </form>
+      
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <span className="w-full border-t" />
+        </div>
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-white px-2 text-gray-500">Or</span>
+        </div>
+      </div>
+
+      <Button 
+        variant="outline" 
+        onClick={loginAsProvider}
+        className="w-full"
+        disabled={isLoading}
+      >
+        Login as Provider
+      </Button>
+    </div>
+  )
 } 
