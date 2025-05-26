@@ -17,4 +17,20 @@ export interface ServiceRequest {
     quotedPrice?: number;
     createdAt: Date;
     updatedAt: Date;
-} 
+}
+
+interface User {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    businessName?: string;
+    services?: string[];
+    distance?: number;
+    location?: {
+        lat: number;
+        lng: number;
+    };
+}
+
+export type { User }; 

@@ -7,12 +7,20 @@ interface User {
   name: string;
   email: string;
   role: string;
+  businessName?: string;
+  location?: {
+    lat: number;
+    lng: number;
+  };
+  services?: string[];
+  isAvailable?: boolean;
 }
 
 interface AuthContextType {
   user: User | null;
   setUser: (user: User | null) => void;
   isLoading: boolean;
+  logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -28,6 +36,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } else {
       localStorage.removeItem('user');
     }
+  };
+
+  const logout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    localStorage.removeItem('userRole');
+    setUser(null);
   };
 
   useEffect(() => {
@@ -46,7 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, setUser: handleSetUser, isLoading }}>
+    <AuthContext.Provider value={{ user, setUser: handleSetUser, isLoading, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -7,6 +7,8 @@
     "typeorm": "^0.3.20"
   },
   "devDependencies": {
-    "@types/node": "^22.10.5"
+    "@types/node": "^22.10.5",
+    "@types/pg": "^8.11.11",
+    "@types/uuid": "^10.0.0"
   }
 }

@@ -1,16 +1,38 @@
-import { DataSource } from 'typeorm';
+import "reflect-metadata";
+import { DataSource } from "typeorm";
 import { User } from "../models/User";
 import { ServiceRequest } from "../models/ServiceRequest";
+import dotenv from 'dotenv';
+dotenv.config();
+console.log("Connecting to database:", process.env.DATABASE_URL); 
 
 export const AppDataSource = new DataSource({
     type: "postgres",
-    url: process.env.DATABASE_URL || "postgresql://towy_db_owner:iDMY39zGtgOr@ep-spring-unit-a58d260q.us-east-2.aws.neon.tech/towy_db?sslmode=require",
+    url: process.env.DATABASE_URL,
     ssl: {
         rejectUnauthorized: false
     },
     synchronize: true,
-    logging: false,
     entities: [User, ServiceRequest],
-    subscribers: [],
-    migrations: []
-}) 
+    migrationsRun: true,
+    logging: true,
+    extra: {
+        ssl: true
+    }
+});
+
+
+import { Provider } from "../entities/Provider";
+
+
+
+export const GeoDataSource = new DataSource({
+    type: "postgres",
+    url: process.env.GEOSPATIAL_DB_URL,
+    ssl: {
+        rejectUnauthorized: false
+    }, // Connection string for geospatial database
+    synchronize: true,
+    entities: [Provider],
+    logging: ["query", "error"],
+});

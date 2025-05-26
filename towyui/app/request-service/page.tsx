@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useAuth } from "@/contexts/AuthContext"
+import { API_URL } from "@/services/api"
 
 export default function RequestServicePage() {
     const [isLoading, setIsLoading] = useState(false)
@@ -36,7 +37,7 @@ export default function RequestServicePage() {
             const location = formData.get('location') as string
             const [lat, lng] = location.split(',').map(coord => parseFloat(coord.trim()))
 
-            const response = await fetch('http://localhost:4000/api/services/request', {
+            const response = await fetch(`${API_URL}/services/request`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

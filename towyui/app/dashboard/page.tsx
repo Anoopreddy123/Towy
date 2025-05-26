@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import { API_URL } from "@/services/api"
 
 interface ServiceRequest {
     id: string
@@ -17,6 +18,7 @@ interface User {
     name: string
     email: string
     role: string
+    businessName?: string
 }
 
 export default function DashboardPage() {
@@ -34,7 +36,7 @@ export default function DashboardPage() {
         setUser(JSON.parse(userData))
 
         // Fetch user's service requests
-        fetch('http://localhost:4000/api/services/user-requests', {
+        fetch(`${API_URL}/services/user-requests`, {
             headers: {
                 'Authorization': `Bearer ${localStorage.getItem('token')}`
             }
@@ -42,13 +44,15 @@ export default function DashboardPage() {
         .then(res => res.json())
         .then(data => setRequests(data))
         .catch(console.error)
-    }, [])
+    }, [router])
 
     if (!user) return null
 
     return (
         <div className="container mx-auto py-20">
-            <h1 className="text-3xl font-bold mb-6">Hi {user.name}</h1>
+            <h1 className="text-3xl font-bold mb-6">
+                Hi {user?.businessName || user?.name || 'there'}
+            </h1>
             
             <div className="bg-white shadow rounded-lg p-6 mb-6">
                 <h2 className="text-2xl font-semibold mb-4">Your Service Requests</h2>

@@ -9,6 +9,7 @@ import { ServiceType } from "@/types/service"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/contexts/AuthContext"
+import { API_URL } from "@/services/api"
 
 export function ServiceRequestForm() {
     const { user } = useAuth()
@@ -69,21 +70,21 @@ export function ServiceRequestForm() {
 
         try {
             const formData = new FormData(event.currentTarget)
-            const data = {
+            const requestData = {
                 serviceType: formData.get('serviceType'),
-                location: location,
-                coordinates: coordinates,
+                location: formData.get('location'),
                 vehicleType: formData.get('vehicleType'),
-                description: formData.get('description')
+                description: formData.get('description'),
+                coordinates
             }
 
-            const response = await fetch('http://localhost:4000/api/services/request', {
+            const response = await fetch(`${API_URL}/services/request`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${localStorage.getItem('token')}`
                 },
-                body: JSON.stringify(data)
+                body: JSON.stringify(requestData)
             })
 
             if (!response.ok) {

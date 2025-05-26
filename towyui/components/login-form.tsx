@@ -1,15 +1,17 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { authService } from "@/services/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { authService } from "@/services/api"
+import { useRouter } from "next/navigation"
+import { useAuth } from "@/contexts/AuthContext"
 
 export function LoginForm() {
-  const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
+  const router = useRouter()
+  const { setUser } = useAuth()
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -21,13 +23,14 @@ export function LoginForm() {
 
     try {
       const response = await authService.login({ email, password })
-      console.log("Login response:", response)
-      
-      window.location.href = response.user.role === 'provider' 
-        ? '/provider/dashboard' 
-        : '/dashboard'
-    } catch (error) {
-      console.error('Login failed:', error)
+      if (response.token && response.user) {
+        localStorage.setItem('token', response.token)
+        localStorage.setItem('user', JSON.stringify(response.user))
+        setUser(response.user)
+        router.push(response.user.role === 'provider' ? '/provider/dashboard' : '/dashboard')
+      }
+    } catch (err) {
+      console.error('Login error:', err)
     } finally {
       setIsLoading(false)
     }
@@ -36,16 +39,23 @@ export function LoginForm() {
   const loginAsProvider = async () => {
     setIsLoading(true)
     try {
-      const response = await authService.login({ 
-        email: "anoopreddy51@gmail.com", 
-        password: "password123",
-        role: "provider"
+      const formData = new FormData(document.querySelector('form') as HTMLFormElement)
+      const email = formData.get("email") as string
+      const password = formData.get("password") as string
+
+      const response = await authService.loginProvider({ 
+        email,
+        password
       })
-      console.log("Provider login response:", response)
-      
-      window.location.href = '/provider/dashboard'
-    } catch (error) {
-      console.error('Provider login failed:', error)
+
+      if (response.token) {
+        localStorage.setItem('token', response.token)
+        localStorage.setItem('user', JSON.stringify(response.user))
+        setUser(response.user)
+        router.push('/provider/dashboard')
+      }
+    } catch (err) {
+      console.error('Provider login error:', err)
     } finally {
       setIsLoading(false)
     }

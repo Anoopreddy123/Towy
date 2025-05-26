@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button"
 export function HeroSection() {
   return (
     <section className="relative h-[80vh] overflow-hidden"> 
-      {/* Background image - absolute instead of fixed */}
+      {}
       <div 
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
         style={{

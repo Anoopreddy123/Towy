@@ -3,78 +3,85 @@
 import Link from "next/link"
 import { Button } from "./ui/button"
 import { useAuth } from "@/contexts/AuthContext"
-import { authService } from "@/services/api"
 import { useRouter } from "next/navigation"
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { UserCircle } from "lucide-react"
 
 export default function Navbar() {
-  const { user, setUser, isLoading } = useAuth()
-  const router = useRouter()
+    const { user, isLoading, logout } = useAuth()
+    const router = useRouter()
 
-  const handleLogout = () => {
-    authService.logout()
-    setUser(null)
-    router.push('/')
-  }
+    const handleLogout = () => {
+        logout()
+        router.push('/')
+    }
 
-  if (isLoading) {
-    return null;
-  }
+    if (isLoading) return null;
 
-  return (
-    <nav className="fixed w-full bg-white z-50 shadow-sm">
-      <div className="container mx-auto px-4">
-        <div className="flex items-center justify-between h-16">
-          <Link href="/" className="text-2xl font-bold text-white-600">
-            TOWY
-          </Link>
-          <div className="flex items-center gap-4">
-            <Link href="/" className="hover:text-green-600">Home</Link>
-            <Link href="/about" className="hover:text-green-600">About</Link>
-            {user && (
-                <>
-                    <Link 
-                        href={user.role === 'provider' ? '/provider/dashboard' : '/dashboard'} 
-                        className="hover:text-green-600"
-                    >
-                        Dashboard
+    return (
+        <nav className="fixed w-full bg-white z-50 shadow-sm">
+            <div className="container mx-auto px-4">
+                <div className="flex items-center justify-between h-16">
+                    <Link href="/" className="text-2xl font-bold text-green-600">
+                        TOWY
                     </Link>
-                    {user.role === 'customer' && (
-                        <Link 
-                            href="/request-service" 
-                            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md"
-                        >
-                            Request Service
-                        </Link>
-                    )}
-                </>
-            )}
-            <Link href="/contact" className="hover:text-green-600">Contact</Link>
-            <div className="ml-4 flex items-center gap-4">
-              {user ? (
-                <div className="flex items-center gap-4">
-                  <span className="font-medium">Welcome, {user.name}!</span>
-                  <Button 
-                    variant="outline" 
-                    onClick={handleLogout}
-                    className="text-red-600 hover:text-red-700"
-                  >
-                    Logout
-                  </Button>
+
+                    <div className="flex items-center gap-4">
+                        <Link href="/" className="hover:text-green-600">Home</Link>
+                        <Link href="/about" className="hover:text-green-600">About</Link>
+                        
+                        {user && (
+                            <>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="ghost" className="flex items-center gap-2">
+                                            <UserCircle className="h-5 w-5" />
+                                            {user.businessName || user.name || user.email}
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                        <DropdownMenuItem onClick={() => router.push(
+                                            user.role === 'provider' ? '/provider/dashboard' : '/dashboard'
+                                        )}>
+                                            Dashboard
+                                        </DropdownMenuItem>
+                                        {user.role === 'customer' && (
+                                            <DropdownMenuItem onClick={() => router.push('/request-service')}>
+                                                Request Service
+                                            </DropdownMenuItem>
+                                        )}
+                                        <DropdownMenuItem onClick={() => router.push('/profile')}>
+                                            Profile
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={handleLogout}>
+                                            Logout
+                                        </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </>
+                        )}
+
+                        {!user && (
+                            <div className="flex items-center gap-4">
+                                <Button variant="ghost" onClick={() => router.push('/login')}>
+                                    Login
+                                </Button>
+                                <Button 
+                                    className="bg-green-600 hover:bg-green-700"
+                                    onClick={() => router.push('/signup')}
+                                >
+                                    Sign Up
+                                </Button>
+                            </div>
+                        )}
+                    </div>
                 </div>
-              ) : (
-                <>
-                  <Button variant="outline" asChild>
-                    <Link href="/login">Login</Link>
-                  </Button>
-                  <Button asChild className="bg-green-600 hover:bg-green-700">
-                    <Link href="/signup">Sign Up</Link>
-                  </Button>
-                </>
-              )}
             </div>
-          </div>
-        </div>
-      </div>
-    </nav>
-  )
+        </nav>
+    )
 }
