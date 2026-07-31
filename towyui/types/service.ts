@@ -27,6 +27,8 @@ interface User {
     businessName?: string;
     services?: string[];
     distance?: number;
+    isAvailable?: boolean;
+    phone?: string;
     location?: {
         lat: number;
         lng: number;

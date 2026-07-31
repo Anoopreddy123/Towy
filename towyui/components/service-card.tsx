@@ -15,14 +15,14 @@ export function ServiceCard({ title, description, image, href }: {
           alt={title}
           width={500}
           height={300}
-          className="w-full h-72 object-cover"
+          className="w-full h-48 md:h-72 object-cover"
         />
-        <div className="p-8">
-          <h3 className="text-2xl font-semibold mb-3 flex items-center group">
+        <div className="p-4 md:p-8">
+          <h3 className="text-xl md:text-2xl font-semibold mb-2 md:mb-3 flex items-center group">
             {title}
             <span className="ml-2 opacity-0 group-hover:opacity-100 transition-opacity">→</span>
           </h3>
-          <p className="text-gray-600 text-lg">
+          <p className="text-gray-600 text-sm md:text-lg">
             {description}
           </p>
         </div>

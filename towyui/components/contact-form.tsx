@@ -18,21 +18,19 @@ export function ContactForm() {
   }
 
   return (
-    <section className="py-20">
-      <div className="container mx-auto px-4">
-        <div className="max-w-6xl mx-auto">
-          <div className="grid md:grid-cols-2 gap-12">
+    <div className="max-w-6xl mx-auto">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12">
             <div>
-              <div className="mb-8">
-                <div className="text-green-600 text-2xl mb-2 font-extrabold">CONTACT US</div>
-                <h2 className="text-4xl font-bold mb-4">
+              <div className="mb-6 md:mb-8">
+                <div className="text-green-600 text-lg md:text-2xl mb-2 font-extrabold">CONTACT US</div>
+                <h2 className="text-2xl md:text-4xl font-bold mb-4">
                   Feel free to give us a call or send us an email with your questions or comments.
                 </h2>
-                <p className="text-gray-600 text-lg">
+                <p className="text-gray-600 text-base md:text-lg">
                   We would love to hear from you, whether you&apos;re interested in working with our team or pursuing a career with us.
                 </p>
               </div>
-              <form onSubmit={handleSubmit} className="space-y-6">
+              <form onSubmit={handleSubmit} className="space-y-4 md:space-y-6">
                 <div>
                   <Label htmlFor="name">Name <span className="text-red-500">*</span></Label>
                   <Input id="name" required placeholder="Enter your name..." />
@@ -47,11 +45,11 @@ export function ContactForm() {
                 </div>
                 <div>
                   <Label htmlFor="message">Message</Label>
-                  <Textarea id="message" placeholder="Enter your message..." className="h-32" />
+                  <Textarea id="message" placeholder="Enter your message..." className="h-24 md:h-32" />
                 </div>
                 <div className="flex items-start space-x-2">
                   <Checkbox id="consent" required />
-                  <Label htmlFor="consent" className="text-lg">
+                  <Label htmlFor="consent" className="text-sm md:text-lg">
                     I allow this website to store my submission so they can respond to my inquiry. <span className="text-red-500">*</span>
                   </Label>
                 </div>
@@ -60,26 +58,26 @@ export function ContactForm() {
                 </Button>
               </form>
             </div>
-            <div className="bg-gray-50 p-6 rounded-lg self-start mt-8 md:mt-[5.5rem]">
-              <div className="space-y-6">
+            <div className="bg-gray-50 p-4 md:p-6 rounded-lg self-start mt-8 md:mt-[5.5rem]">
+              <div className="space-y-4 md:space-y-6">
                 <div>
-                  <h3 className="text-2xl font-bold mb-4">Contact us</h3>
+                  <h3 className="text-xl md:text-2xl font-bold mb-4">Contact us</h3>
                   <p className="flex items-center gap-3">
-                    <span className="text-2xl">📞</span>
-                    <a href="tel:+15625780685" className="text-xl hover:text-green-600">
+                    <span className="text-xl md:text-2xl">📞</span>
+                    <a href="tel:+15625780685" className="text-lg md:text-xl hover:text-green-600">
                       +15625780685
                     </a>
                   </p>
                 </div>
                 <div>
-                  <h3 className="text-2xl font-bold mb-4">Location</h3>
+                  <h3 className="text-xl md:text-2xl font-bold mb-4">Location</h3>
                   <p className="flex items-center gap-3">
-                    <span className="text-2xl">📍</span>
+                    <span className="text-xl md:text-2xl">📍</span>
                     <a 
                       href="https://maps.google.com" 
                       target="_blank" 
                       rel="noopener noreferrer" 
-                      className="text-xl hover:text-green-600"
+                      className="text-lg md:text-xl hover:text-green-600"
                     >
                       Long Beach, CA US
                     </a>
@@ -89,7 +87,5 @@ export function ContactForm() {
             </div>
           </div>
         </div>
-      </div>
-    </section>
   )
 }

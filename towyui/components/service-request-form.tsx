@@ -14,6 +14,7 @@ import { API_URL } from "@/services/api"
 export function ServiceRequestForm() {
     const { user } = useAuth()
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const [serviceType, setServiceType] = useState("")
     const [location, setLocation] = useState("")
     const [coordinates, setCoordinates] = useState<{lat: number, lng: number} | null>(null)
     const { toast } = useToast()
@@ -57,6 +58,15 @@ export function ServiceRequestForm() {
             return
         }
 
+        if (!serviceType) {
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: "Please select a service type",
+            })
+            return
+        }
+
         if (!coordinates) {
             toast({
                 variant: "destructive",
@@ -71,12 +81,16 @@ export function ServiceRequestForm() {
         try {
             const formData = new FormData(event.currentTarget)
             const requestData = {
-                serviceType: formData.get('serviceType'),
+                serviceType: serviceType,
                 location: formData.get('location'),
                 vehicleType: formData.get('vehicleType'),
                 description: formData.get('description'),
                 coordinates
             }
+
+            console.log('Submitting request data:', requestData)
+            console.log('API URL:', `${API_URL}/services/request`)
+            console.log('Token:', localStorage.getItem('token'))
 
             const response = await fetch(`${API_URL}/services/request`, {
                 method: 'POST',
@@ -87,18 +101,34 @@ export function ServiceRequestForm() {
                 body: JSON.stringify(requestData)
             })
 
+            console.log('Response status:', response.status)
+            console.log('Response headers:', response.headers)
+
             if (!response.ok) {
                 const error = await response.json()
+                console.error('Server error:', error)
                 throw new Error(error.message || 'Failed to create service request')
             }
 
-            const { service } = await response.json()
-            router.push(`/service-providers/${service.id}`)
-        } catch {
+            const responseData = await response.json()
+            console.log('Success response:', responseData)
+            
+            if (responseData.service) {
+                router.push(`/service-providers/${responseData.service.id}`)
+            } else {
+                console.error('No service ID in response:', responseData)
+                toast({
+                    variant: "destructive",
+                    title: "Error",
+                    description: "Service created but no ID returned",
+                })
+            }
+        } catch (error) {
+            console.error('Form submission error:', error)
             toast({
                 variant: "destructive",
                 title: "Error",
-                description: "Failed to create service request. Please try again.",
+                description: error.message || "Failed to create service request. Please try again.",
             })
         } finally {
             setIsSubmitting(false)
@@ -109,17 +139,14 @@ export function ServiceRequestForm() {
         <form onSubmit={handleSubmit} className="space-y-6 max-w-xl mx-auto">
             <div>
                 <label className="block text-sm font-medium mb-2">Service Type</label>
-                <Select name="serviceType" required>
+                <Select name="serviceType" required onValueChange={(value) => setServiceType(value)}>
                     <SelectTrigger>
                         <SelectValue placeholder="Select service type" />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value={ServiceType.TOWING}>Towing</SelectItem>
-                        <SelectItem value={ServiceType.GAS_DELIVERY}>Gas Delivery</SelectItem>
-                        <SelectItem value={ServiceType.MECHANIC}>Mechanic</SelectItem>
-                        <SelectItem value={ServiceType.BATTERY_JUMP}>Battery Jump</SelectItem>
-                        <SelectItem value={ServiceType.TIRE_CHANGE}>Tire Change</SelectItem>
-                        <SelectItem value={ServiceType.LOCKOUT}>Lockout</SelectItem>
+                        <SelectItem value="towing">Towing</SelectItem>
+                        <SelectItem value="roadside_assistance">Roadside Assistance</SelectItem>
+                        <SelectItem value="vehicle_recovery">Vehicle Recovery</SelectItem>
                     </SelectContent>
                 </Select>
             </div>

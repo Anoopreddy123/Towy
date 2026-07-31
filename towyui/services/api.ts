@@ -11,104 +11,79 @@ interface SignupData {
     services?: string[];
 }
 
-//Adding static API_URL
-
-//  export const API_URL = "https://towy-backend.vercel.app";
-export const API_URL = "http://localhost:4000";
+// API URL configuration
+export const API_URL = process.env.NODE_ENV === 'production' 
+    ? "https://towy-backend.vercel.app"
+    : "http://localhost:4000";
 
 if (!API_URL) {
     throw new Error('API_URL not configured');
 }
-if (!API_URL || !API_URL.startsWith('http')) {
-    throw new Error('Invalid API_URL configuration. URL must be a valid HTTP/HTTPS endpoint');
-}
 
-
-// Helper function for headers
-const getHeaders = () => {
-    const headers = new Headers({
+// Create Axios instance
+const api = axios.create({
+    baseURL: API_URL,
+    headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json'
-    });
-    
+    },
+    withCredentials: true
+});
+
+// Add token to requests
+api.interceptors.request.use((config) => {
     const token = localStorage.getItem('token');
     if (token) {
-        headers.append('Authorization', `Bearer ${token}`);
+        config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+});
+
+// Error handling helper
+const handleApiError = (error: any) => {
+    console.error('API Error:', error);
+    
+    if (error.response?.data) {
+        const responseData = error.response.data;
+        
+        if (responseData.error && responseData.error.code === '42P01') {
+            throw new Error('Database setup incomplete. Please contact support.');
+        }
+        
+        const errorMessage = typeof responseData.error === 'object' 
+            ? responseData.error.message || 'Server error occurred'
+            : responseData.error || responseData.message || `Request failed with status: ${error.response.status}`;
+            
+        throw new Error(errorMessage);
     }
     
-    return headers;
+    throw new Error(error.message || 'Network error occurred');
 };
 
 export const authService = {
     signup: async (data: SignupData) => {
         try {
-            if (!API_URL) {
-                throw new Error('API URL is not configured');
-            }
-
-            const response = await fetch(`${API_URL}/auth/signup`, {
-                method: 'POST',
-                headers: getHeaders(),
-                body: JSON.stringify(data)
-            });
-
-            const responseData = await response.json();
-
-            if (!response.ok) {
-                // Log the full response data for debugging
-                console.error('Server response:', responseData);
-                
-                // Parse PostgreSQL errors
-                if (responseData.error && responseData.error.code === '42P01') {
-                    throw new Error('Database setup incomplete. Please contact support.');
-                }
-                
-                // Handle other errors
-                const errorMessage = typeof responseData.error === 'object' 
-                    ? responseData.error.message || 'Server error occurred'
-                    : responseData.error || responseData.message || `Signup failed with status: ${response.status}`;
-                
-                throw new Error(errorMessage);
-            }
-
-            return responseData;
+            const response = await api.post('/auth/signup', data);
+            return response.data;
         } catch (error: any) {
-            // Enhanced error logging
-            console.error('Signup error details:', {
-                originalError: error,
-                message: error.message,
-                response: error.response?.data,
-                status: error.response?.status
-            });
-
-            throw new Error(
-                error.message.includes('Database setup incomplete') 
-                    ? error.message 
-                    : 'Unable to complete signup. Please try again later.'
-            );
+            throw handleApiError(error);
         }
     },
 
     login: async (credentials: { email: string; password: string; role?: string }) => {
-        const response = await fetch(`${API_URL}/auth/login`, {
-            method: 'POST',
-            headers: getHeaders(),
-            credentials: 'include',
-            body: JSON.stringify(credentials)
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Login failed');
+        try {
+            const response = await api.post('/auth/login', credentials);
+            const data = response.data;
+            
+            if (data.token) {
+                localStorage.setItem('token', data.token);
+                localStorage.setItem('user', JSON.stringify(data.user));
+                localStorage.setItem('userRole', data.user.role);
+            }
+            return data;
+        } catch (error) {
+            throw handleApiError(error);
         }
-
-        const data = await response.json();
-        if (data.token) {
-            localStorage.setItem('token', data.token);
-            localStorage.setItem('user', JSON.stringify(data.user));
-            localStorage.setItem('userRole', data.user.role);
-        }
-        return data;
     },
 
     logout: () => {
@@ -118,14 +93,26 @@ export const authService = {
     },
 
     loginProvider: async (credentials: { email: string; password: string }) => {
-        const response = await fetch(`${API_URL}/auth/provider/login`, {
-            method: 'POST',
-            headers: getHeaders(),
-            body: JSON.stringify(credentials)
-        });
-
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.message || 'Login failed');
-        return data;
+        try {
+            const response = await api.post('/auth/provider/login', credentials);
+            return response.data;
+        } catch (error) {
+            throw handleApiError(error);
+        }
     },
-}; 
+    
+    // Legacy methods from src/services/api.ts mapped to new structure if needed
+    // keeping original signatures for compatibility
+    register: (data: unknown) => api.post('/users/register', data),
+    getProfile: () => api.get('/users/profile')
+};
+
+export const serviceRequests = {
+    create: (data: unknown) => api.post('/services/request', data),
+    getNearbyMechanics: (lat: number, lng: number) => 
+        api.get(`/services/mechanics/nearby?latitude=${lat}&longitude=${lng}`),
+    updateStatus: (id: string, status: string) => 
+        api.patch(`/services/request/${id}/status`, { status })
+};
+
+export default api; 

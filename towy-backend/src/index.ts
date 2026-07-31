@@ -1,82 +1,227 @@
 import "reflect-metadata";
 import express from "express";
 import cors from "cors";
-import { AppDataSource } from "./config/database";
-import { GeoService } from './config/geo-services';
+import { AppDataSource, simpleDbPool } from "./config/database";
 import { userRouter } from "./routes/userRoutes";
 import { serviceRouter } from "./routes/serviceRoutes";
 import { authRouter } from "./routes/authRoutes";
+import { notificationEventHandler } from "./events/NotificationEventHandler";
+import { eventBus } from "./events/EventBus";
 import dotenv from 'dotenv';
 dotenv.config();
+
+// CRITICAL: Bypass SSL validation for PostgreSQL connections in serverless environments
+process.env.PGSSLMODE = 'no-verify';
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 const app = express();
 const port = process.env.PORT || 4000;
 
-// Initialize database before setting up routes
-console.log("Database URL:", process.env.DATABASE_URL);
-AppDataSource.initialize()
-    .then(() => { 
-        console.log("Database connected");
-        console.log("Loaded entities:", AppDataSource.entityMetadatas.map(e => e.name));
-        try {
-            const geoService = new GeoService();
-            //await geoService.initializeTables(); // Make sure tables are created
-        } catch (error) {
-            console.error("GeoService initialization failed:", error);
-            // Continue app startup even if GeoService fails
+// CORS: browsers (web/Expo) + native clients often send no Origin — allow those.
+const allowedOrigins = new Set([
+    'https://www.towy.me',
+    'https://towy-ui.vercel.app',
+    'http://localhost:3000',
+    'http://localhost:8081',
+    'http://127.0.0.1:8081',
+    'http://localhost:19006',
+    'http://127.0.0.1:19006',
+]);
+
+const corsOptions = {
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+        if (!origin) {
+            callback(null, true);
+            return;
         }
+        if (allowedOrigins.has(origin)) {
+            callback(null, true);
+            return;
+        }
+        try {
+            const host = new URL(origin).hostname;
+            if (host.endsWith('.vercel.app')) {
+                callback(null, true);
+                return;
+            }
+        } catch {
+            /* ignore */
+        }
+        callback(null, false);
+    },
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    credentials: true,
+    optionsSuccessStatus: 204
+};
 
-        // Define CORS options for different scenarios
-        const corsOptions = {
-            origin: [
-                'https://towy-ui.vercel.app',
-                'http://localhost:3000',
-                /\.vercel\.app$/
-            ],
-            methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-            allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
-            credentials: true,
-            optionsSuccessStatus: 204
-        };
+// Apply CORS middleware globally
+app.use(cors(corsOptions));
 
-        // Basic CORS for public routes
-        const publicCors = cors({
-            origin: '*',
-            methods: ['GET', 'POST', 'OPTIONS'],
-            allowedHeaders: ['Content-Type']
+// Parse JSON bodies
+app.use(express.json());
+
+// Health check endpoint (always available)
+app.get('/health', (req, res) => {
+    res.json({ status: 'healthy', message: 'Server is running' });
+});
+
+// Test endpoint (always available)
+app.get('/test', (req, res) => {
+    res.json({ message: 'Backend is working!' });
+});
+
+// Event system test endpoint
+app.get('/test-events', async (req, res) => {
+    try {
+        const stats = eventBus.getEventStats();
+        const testResult = await notificationEventHandler.testNotificationSystem();
+        
+        // Test event emission
+        console.log('Testing event emission...');
+        eventBus.emitEvent({
+            id: 'test-event-' + Date.now(),
+            type: 'service_request_created',
+            timestamp: new Date(),
+            data: {
+                requestId: 'test-request-123',
+                userId: 'test-user-123',
+                serviceType: 'towing',
+                location: 'Test Location',
+                coordinates: { lat: 40.7128, lng: -74.0060 },
+                description: 'Test request',
+                vehicleType: 'Sedan'
+            }
         });
-
-        // Secure CORS for authenticated routes
-        const secureCors = cors(corsOptions);
-
-        // Apply route-specific CORS
-        app.use(express.json());
-
-        // Public routes
-        app.get('/health', publicCors, (req, res) => {
-            res.json({ status: 'healthy' });
+        
+        res.json({
+            message: 'Event system test completed',
+            eventBus: stats,
+            notificationSystem: testResult ? 'working' : 'has issues',
+            timestamp: new Date().toISOString()
         });
-
-        // Secure routes with specific CORS
-        app.use('/auth/provider/login', secureCors);
-        app.use('/auth/login', secureCors);
-        app.use('/auth/signup', secureCors);
-        app.use('/services', secureCors);
-        app.use('/users', secureCors);
-
-        // Handle OPTIONS preflight requests
-        app.options('*', secureCors);
-
-        // Your existing route handlers
-        app.use("/auth", authRouter);
-        app.use("/users", userRouter);
-        app.use("/services", serviceRouter);
-
-        app.listen(port, () => {
-            console.log(`Server running on port ${port}`);
+    } catch (error: any) {
+        res.status(500).json({
+            message: 'Event system test failed',
+            error: error.message
         });
-    })
-    .catch((error: any) => {
-        console.error("Database connection error:", error);
-        process.exit(1);
+    }
+});
+
+// Database test endpoint
+app.get('/db-test', async (req, res) => {
+    try {
+        if (AppDataSource.isInitialized) {
+            const entities = AppDataSource.entityMetadatas && Array.isArray(AppDataSource.entityMetadatas) 
+                ? AppDataSource.entityMetadatas.map(e => e.name)
+                : [];
+            res.json({ 
+                status: 'connected', 
+                message: 'Database is connected',
+                entities: entities
+            });
+        } else {
+            res.json({ 
+                status: 'not_connected', 
+                message: 'Database is not connected',
+                error: 'Database initialization failed'
+            });
+        }
+    } catch (error: any) {
+        res.json({ 
+            status: 'error', 
+            message: 'Database test failed',
+            error: error.message
+        });
+    }
+});
+
+// Simple database connection test
+app.get('/simple-db-test', async (req, res) => {
+    try {
+        const client = await simpleDbPool.connect();
+        const result = await client.query('SELECT NOW()');
+        client.release();
+        res.json({ 
+            status: 'connected', 
+            message: 'Simple database connection works',
+            timestamp: result.rows[0].now
+        });
+    } catch (error: any) {
+        res.json({ 
+            status: 'error', 
+            message: 'Simple database connection failed',
+            error: error.message
+        });
+    }
+});
+
+// Always register routes (they will handle database errors internally)
+app.use("/auth", authRouter);
+app.use("/users", userRouter);
+app.use("/services", serviceRouter);
+
+// Initialize database
+async function initializeDatabase() {
+    try {
+        console.log("Database URL:", process.env.DATABASE_URL);
+        console.log("Starting database initialization...");
+        
+        await AppDataSource.initialize();
+        
+        console.log("Database connected successfully");
+        const entities = AppDataSource.entityMetadatas && Array.isArray(AppDataSource.entityMetadatas)
+            ? AppDataSource.entityMetadatas.map(e => e.name)
+            : [];
+        console.log("Loaded entities:", entities);
+        console.log("Database is ready");
+    } catch (error: any) {
+        console.error("Failed to initialize database:", error);
+        console.error("Error details:", {
+            message: error.message,
+            code: error.code,
+            stack: error.stack
+        });
+        // Don't exit - let server continue with basic endpoints
+    }
+}
+
+// Initialize event system
+async function initializeEventSystem() {
+    try {
+        console.log("Initializing event-driven architecture...");
+        
+        // Initialize notification event handler (this sets up event listeners)
+        const handler = notificationEventHandler;
+        console.log("Notification event handler initialized");
+        
+        // Test the notification system
+        const testResult = await handler.testNotificationSystem();
+        if (testResult) {
+            console.log("✅ Event-driven notification system is ready");
+        } else {
+            console.warn("⚠️ Event-driven notification system has issues but will continue");
+        }
+        
+        // Log event bus stats
+        const stats = eventBus.getEventStats();
+        console.log("Event bus stats:", stats);
+        
+    } catch (error: any) {
+        console.error("Failed to initialize event system:", error);
+        console.error("Error details:", {
+            message: error.message,
+            stack: error.stack
+        });
+        // Don't exit - let server continue
+    }
+}
+
+// Start server
+app.listen(port, () => {
+    console.log(`Server running on port ${port}`);
+    // Initialize database and event system after server starts
+    initializeDatabase().then(() => {
+        initializeEventSystem();
     });
+});

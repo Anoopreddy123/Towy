@@ -11,7 +11,8 @@ import {
     findNearbyProviders,
     notifyProvider,
     getServiceRequest,
-    getNearbyRequests
+    getNearbyRequests,
+    parseVoiceRequest,
 } from '../controllers/serviceController';
 import { authMiddleware } from '../middleware/auth';
 
@@ -20,6 +21,7 @@ const router = Router();
 // Service request routes
 router.get('/public/providers', getAvailableProviders);
 router.post('/request', authMiddleware, createServiceRequest);
+router.post('/voice/parse', authMiddleware, parseVoiceRequest);
 router.get('/providers', authMiddleware, getAvailableProviders);
 router.get('/user-requests', authMiddleware, getUserRequests);
 router.patch('/request/:id/status', authMiddleware, updateServiceStatus);

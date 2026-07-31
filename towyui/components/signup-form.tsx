@@ -104,10 +104,10 @@ export function SignupForm() {
     }
 
     return (
-        <div className="mx-auto max-w-sm space-y-8">
+        <div className="mx-auto max-w-sm md:max-w-md space-y-6 md:space-y-8">
             <div className="space-y-2 text-center">
-                <h1 className="text-3xl font-bold">Create an Account</h1>
-                <p className="text-gray-500">Enter your information to create an account</p>
+                <h1 className="text-2xl md:text-3xl font-bold">Create an Account</h1>
+                <p className="text-gray-500 text-sm md:text-base">Enter your information to create an account</p>
             </div>
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
@@ -155,7 +155,7 @@ export function SignupForm() {
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <div className="flex justify-between items-center p-4 border rounded-lg">
+                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center p-4 border rounded-lg space-y-2 md:space-y-0">
                                 <div className="text-sm">
                                     <p className="font-medium">Shop Location</p>
                                     {location.latitude && location.longitude ? (
@@ -170,6 +170,7 @@ export function SignupForm() {
                                     type="button"
                                     variant="outline"
                                     onClick={getLocation}
+                                    className="w-full md:w-auto"
                                 >
                                     {location.latitude ? "Update Location" : "Get Location"}
                                 </Button>

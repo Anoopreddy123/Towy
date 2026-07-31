@@ -10,15 +10,18 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { UserCircle } from "lucide-react"
+import { UserCircle, Menu, X } from "lucide-react"
+import { useState } from "react"
 
 export default function Navbar() {
     const { user, isLoading, logout } = useAuth()
     const router = useRouter()
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
     const handleLogout = () => {
         logout()
         router.push('/')
+        setIsMobileMenuOpen(false)
     }
 
     if (isLoading) return null;
@@ -27,13 +30,15 @@ export default function Navbar() {
         <nav className="fixed w-full bg-white z-50 shadow-sm">
             <div className="container mx-auto px-4">
                 <div className="flex items-center justify-between h-16">
-                    <Link href="/" className="text-2xl font-bold text-green-600">
+                    <Link href="/" className="text-xl md:text-2xl font-bold text-green-600">
                         TOWY
                     </Link>
 
-                    <div className="flex items-center gap-4">
-                        <Link href="/" className="hover:text-green-600">Home</Link>
-                        <Link href="/about" className="hover:text-green-600">About</Link>
+                    {/* Desktop Menu */}
+                    <div className="hidden md:flex items-center gap-4">
+                        <Link href="/" className="hover:text-green-600 transition-colors">Home</Link>
+                        <Link href="/about" className="hover:text-green-600 transition-colors">About</Link>
+                        <Link href="/contact" className="hover:text-green-600 transition-colors">Contact</Link>
                         
                         {user && (
                             <>
@@ -41,7 +46,9 @@ export default function Navbar() {
                                     <DropdownMenuTrigger asChild>
                                         <Button variant="ghost" className="flex items-center gap-2">
                                             <UserCircle className="h-5 w-5" />
-                                            {user.businessName || user.name || user.email}
+                                            <span className="hidden lg:inline">
+                                                {user.businessName || user.name || user.email}
+                                            </span>
                                         </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end">
@@ -80,7 +87,116 @@ export default function Navbar() {
                             </div>
                         )}
                     </div>
+
+                    {/* Mobile Menu Button */}
+                    <button
+                        className="md:hidden p-2"
+                        onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                    >
+                        {isMobileMenuOpen ? (
+                            <X className="h-6 w-6" />
+                        ) : (
+                            <Menu className="h-6 w-6" />
+                        )}
+                    </button>
                 </div>
+
+                {/* Mobile Menu */}
+                {isMobileMenuOpen && (
+                    <div className="md:hidden bg-white border-t border-gray-200 py-4">
+                        <div className="flex flex-col space-y-4 px-4">
+                            <Link 
+                                href="/" 
+                                className="hover:text-green-600 transition-colors"
+                                onClick={() => setIsMobileMenuOpen(false)}
+                            >
+                                Home
+                            </Link>
+                            <Link 
+                                href="/about" 
+                                className="hover:text-green-600 transition-colors"
+                                onClick={() => setIsMobileMenuOpen(false)}
+                            >
+                                About
+                            </Link>
+                            <Link 
+                                href="/contact" 
+                                className="hover:text-green-600 transition-colors"
+                                onClick={() => setIsMobileMenuOpen(false)}
+                            >
+                                Contact
+                            </Link>
+                            
+                            {user && (
+                                <>
+                                    <Button 
+                                        variant="ghost" 
+                                        className="justify-start"
+                                        onClick={() => {
+                                            router.push(user.role === 'provider' ? '/provider/dashboard' : '/dashboard')
+                                            setIsMobileMenuOpen(false)
+                                        }}
+                                    >
+                                        Dashboard
+                                    </Button>
+                                    {user.role === 'customer' && (
+                                        <Button 
+                                            variant="ghost" 
+                                            className="justify-start"
+                                            onClick={() => {
+                                                router.push('/request-service')
+                                                setIsMobileMenuOpen(false)
+                                            }}
+                                        >
+                                            Request Service
+                                        </Button>
+                                    )}
+                                    <Button 
+                                        variant="ghost" 
+                                        className="justify-start"
+                                        onClick={() => {
+                                            router.push('/profile')
+                                            setIsMobileMenuOpen(false)
+                                        }}
+                                    >
+                                        Profile
+                                    </Button>
+                                    <Button 
+                                        variant="ghost" 
+                                        className="justify-start text-red-600"
+                                        onClick={handleLogout}
+                                    >
+                                        Logout
+                                    </Button>
+                                </>
+                            )}
+
+                            {!user && (
+                                <div className="flex flex-col space-y-2 pt-4 border-t border-gray-200">
+                                    <Button 
+                                        variant="ghost" 
+                                        className="justify-start"
+                                        onClick={() => {
+                                            router.push('/login')
+                                            setIsMobileMenuOpen(false)
+                                        }}
+                                    >
+                                        Login
+                                    </Button>
+                                    <Button 
+                                        className="bg-green-600 hover:bg-green-700 justify-start"
+                                        onClick={() => {
+                                            router.push('/signup')
+                                            setIsMobileMenuOpen(false)
+                                        }}
+                                    >
+                                        Sign Up
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
             </div>
         </nav>
     )

@@ -13,18 +13,65 @@ import { API_URL } from "@/services/api"
 export default function RequestServicePage() {
     const [isLoading, setIsLoading] = useState(false)
     const [serviceType, setServiceType] = useState("")
+    const [placeName, setPlaceName] = useState<string | null>(null)
+    const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null)
     const router = useRouter()
     const { toast } = useToast()
     const { user } = useAuth()
 
-    const handleGetLocation = () => {
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition((position) => {
-                const locationInput = document.getElementById('location') as HTMLInputElement
-                if (locationInput) {
-                    locationInput.value = `${position.coords.latitude}, ${position.coords.longitude}`
+    const reverseGeocode = async (lat: number, lng: number): Promise<string | null> => {
+        try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}&zoom=14&addressdetails=1`, {
+                headers: {
+                    'User-Agent': 'towy-ui/1.0 (reverse-geocoder)'
                 }
             })
+            if (!res.ok) return null
+            const data = await res.json()
+            const address = data.address || {}
+            const city = address.city || address.town || address.village || address.hamlet
+            const state = address.state
+            const display = [city, state].filter(Boolean).join(', ') || data.display_name
+            setPlaceName(display)
+            return display
+        } catch (e) {
+            // ignore
+            return null
+        }
+    }
+
+    const handleGetLocation = () => {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(async (position) => {
+                const locationInput = document.getElementById('location') as HTMLInputElement
+                if (locationInput) {
+                    setCoords({ lat: position.coords.latitude, lng: position.coords.longitude })
+                    const display = await reverseGeocode(position.coords.latitude, position.coords.longitude)
+                    if (display) {
+                        locationInput.value = display
+                    } else {
+                        locationInput.value = `${position.coords.latitude}, ${position.coords.longitude}`
+                    }
+                }
+            })
+        }
+    }
+
+    const handleLocationBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+        const val = e.currentTarget.value
+        if (!val) return
+        const parts = val.split(',')
+        if (parts.length !== 2) return
+        const lat = parseFloat(parts[0].trim())
+        const lng = parseFloat(parts[1].trim())
+        if (Number.isFinite(lat) && Number.isFinite(lng)) {
+            setCoords({ lat, lng })
+            ;(async () => {
+                const display = await reverseGeocode(lat, lng)
+                if (display) {
+                    e.currentTarget.value = display
+                }
+            })()
         }
     }
 
@@ -34,8 +81,24 @@ export default function RequestServicePage() {
 
         try {
             const formData = new FormData(event.currentTarget)
-            const location = formData.get('location') as string
-            const [lat, lng] = location.split(',').map(coord => parseFloat(coord.trim()))
+            const locationInput = formData.get('location') as string
+
+            let submitCoords = coords
+            // Fallback: if user pasted raw coords and didn't trigger blur, parse here
+            if (!submitCoords && locationInput && locationInput.includes(',')) {
+                const parts = locationInput.split(',')
+                if (parts.length === 2) {
+                    const maybeLat = parseFloat(parts[0].trim())
+                    const maybeLng = parseFloat(parts[1].trim())
+                    if (Number.isFinite(maybeLat) && Number.isFinite(maybeLng)) {
+                        submitCoords = { lat: maybeLat, lng: maybeLng }
+                    }
+                }
+            }
+
+            if (!submitCoords) {
+                throw new Error('Location coordinates missing')
+            }
 
             const response = await fetch(`${API_URL}/services/request`, {
                 method: 'POST',
@@ -45,8 +108,8 @@ export default function RequestServicePage() {
                 },
                 body: JSON.stringify({
                     serviceType,
-                    location: formData.get('location'),
-                    coordinates: { lat, lng },
+                    location: locationInput, // backend will normalize to friendly name
+                    coordinates: submitCoords,
                     vehicleType: formData.get('vehicleType'),
                     description: formData.get('description')
                 })
@@ -98,6 +161,7 @@ export default function RequestServicePage() {
                                 placeholder="Enter your location"
                                 required
                                 className="flex-1"
+                                onBlur={handleLocationBlur}
                             />
                             <Button 
                                 type="button"
@@ -107,6 +171,9 @@ export default function RequestServicePage() {
                                 📍 Current Location
                             </Button>
                         </div>
+                        {placeName && (
+                            <p className="text-sm text-gray-600">{placeName}</p>
+                        )}
                     </div>
 
                     <div className="space-y-2">

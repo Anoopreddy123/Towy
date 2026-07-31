@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label"
 
 export default function LoginPage() {
     return (
-        <div className="container mx-auto py-20">
+        <div className="container mx-auto py-12 md:py-20 px-4">
             <LoginForm />
         </div>
     )

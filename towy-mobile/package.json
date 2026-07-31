@@ -1,0 +1,16 @@
+{
+  "name": "towy-mobile",
+  "private": true,
+  "description": "Expo app is ./towy. From this folder run: npm run install:app && npm start (or: cd towy && npx expo start)",
+  "engines": {
+    "node": ">=20.19.4"
+  },
+  "scripts": {
+    "install:app": "npm install --prefix towy",
+    "start": "npm exec --prefix towy -- expo start ./towy",
+    "ios": "npm exec --prefix towy -- expo start ./towy --ios",
+    "android": "npm exec --prefix towy -- expo start ./towy --android",
+    "web": "npm exec --prefix towy -- expo start ./towy --web",
+    "lint": "cd towy && npx expo lint"
+  }
+}

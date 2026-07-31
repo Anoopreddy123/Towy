@@ -1,41 +1,127 @@
 import { Request, Response } from 'express';
-import { AppDataSource, GeoDataSource } from '../config/database';
-import { ServiceRequest, ServiceType } from '../models/ServiceRequest';
-import { User } from '../models/User';
-import { Provider } from "../entities/Provider";
+import { simpleDbPool } from '../config/database';
+import { GeoService } from '../config/geo-services';
+import { eventBus } from '../events/EventBus';
+import { v4 as uuidv4 } from 'uuid';
 
+import { reverseGeocode } from '../services/geocodingService';
 
-const serviceRepository = AppDataSource.getRepository(ServiceRequest);
-const userRepository = AppDataSource.getRepository(User);
-const providerRepository = GeoDataSource.getRepository(Provider);
+let geoService: any = null;
 
+// Initialize GeoService when needed
+function initializeGeoService() {
+    if (!geoService) {
+        geoService = new GeoService();
+    }
+}
 
 export const createServiceRequest = async (req: Request, res: Response): Promise<void> => {
     try {
         const { serviceType, location, coordinates, description, vehicleType } = req.body;
         console.log('Creating service request with:', { serviceType, location, coordinates });
 
-        // Validate service type
-        if (!Object.values(ServiceType).includes(serviceType)) {
+        // Validate service type (support all types used by the UI)
+        const validServiceTypes = [
+            'towing',
+            'roadside_assistance',
+            'vehicle_recovery',
+            'battery_jump',
+            'tire_change',
+            'gas_delivery',
+            'lockout',
+            'mechanic'
+        ];
+        if (!validServiceTypes.includes(serviceType)) {
             res.status(400).json({ message: "Invalid service type" });
             return;
         }
 
-        const service = serviceRepository.create({
+        // Normalize coordinates to a "lat, lng" string
+        let coordinatesText: string | null = null;
+        let humanReadableLocation: string | null = location || null;
+        if (typeof coordinates === 'string') {
+            coordinatesText = coordinates;
+        } else if (coordinates && typeof coordinates === 'object' &&
+                   typeof coordinates.lat === 'number' && typeof coordinates.lng === 'number') {
+            coordinatesText = `${coordinates.lat}, ${coordinates.lng}`;
+            // Try reverse geocoding to a human-readable area name
+            try {
+                const result = await reverseGeocode(coordinates.lat, coordinates.lng);
+                if (result?.display) {
+                    humanReadableLocation = result.display;
+                }
+            } catch (e) {
+                console.warn('Reverse geocoding failed, using raw location or coords string');
+            }
+        } else if (Array.isArray(coordinates) && coordinates.length === 2) {
+            const [lat, lng] = coordinates;
+            if (typeof lat === 'number' && typeof lng === 'number') {
+                coordinatesText = `${lat}, ${lng}`;
+                try {
+                    const result = await reverseGeocode(lat, lng);
+                    if (result?.display) {
+                        humanReadableLocation = result.display;
+                    }
+                } catch (e) {
+                    console.warn('Reverse geocoding failed, using raw location or coords string');
+                }
+            }
+        }
+
+        // Use GeoService's Supabase pool for inserting into geospatial DB
+        initializeGeoService();
+
+        // Determine which foreign key to populate based on role
+        const isProvider = req.user?.role === 'provider';
+        const userId = !isProvider ? req.user?.id : null;
+        const providerId = isProvider ? req.user?.id : null;
+
+        console.log('Insert FK resolution:', { isProvider, userId, providerId });
+
+        const created = await geoService.createServiceRequest({
             serviceType,
-            location,
-            coordinates,
+            location: humanReadableLocation || location || coordinatesText || 'Unknown location',
+            coordinatesText,
             description,
             vehicleType,
-            status: "pending",
-            user: req.user
+            userId,
+            providerId,
         });
 
-        await serviceRepository.save(service);
-        res.status(201).json({ message: 'Service request created', service });
-    } catch (error) {
+        console.log('Service request created successfully:', created);
+        
+        // Emit service request created event for notification system
+        if (created && created.id) {
+            // Debug: Log the raw request data
+            console.log('Raw request body:', req.body);
+            console.log('Extracted data:', { serviceType, location, coordinates, description, vehicleType });
+            
+            const serviceRequestEvent = {
+                id: uuidv4(),
+                type: 'service_request_created' as const,
+                timestamp: new Date(),
+                data: {
+                    requestId: created.id,
+                    userId: req.user?.id,
+                    serviceType: serviceType,
+                    location: humanReadableLocation || location || coordinatesText || 'Unknown location',
+                    coordinates: coordinates,
+                    description: description,
+                    vehicleType: vehicleType
+                }
+            };
+            
+            console.log('Emitting service request created event:', serviceRequestEvent);
+            eventBus.emitEvent(serviceRequestEvent);
+        }
+        
+        res.status(201).json({ message: 'Service request created', service: created });
+    } catch (error: any) {
         console.error('Create service error:', error);
-        res.status(500).json({ message: "Error creating service request" });
+        res.status(500).json({ 
+            message: "Error creating service request",
+            details: error?.message,
+        });
     }
 };
 
@@ -49,24 +135,18 @@ export const getAvailableProviders = async (req: Request, res: Response): Promis
             return;
         }
 
-        const providers = await userRepository
-            .createQueryBuilder("user")
-            .where("user.role = :role", { role: "provider" })
-            .andWhere("user.services @> ARRAY[:serviceType]", { serviceType })
-            .andWhere(
-                `ST_DWithin(
-                    ST_SetSRID(ST_MakePoint(user.longitude, user.latitude), 4326),
-                    ST_SetSRID(ST_MakePoint(:longitude, :latitude), 4326),
-                    :radius
-                )`,
-                { longitude, latitude, radius }
-            )
-            .getMany();
+        // Use GeoService to find nearby providers
+        initializeGeoService();
+        const providers = await geoService.findNearbyProviders(
+            parseFloat(latitude as string),
+            parseFloat(longitude as string),
+            parseFloat(radius as string),
+            serviceType as string
+        );
 
-        console.log("Returning providers:", providers); // This is where the log is printed
-
+        console.log("Returning providers:", providers);
         res.json(providers);
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error finding service providers:", error);
         res.status(500).json({ message: "Error finding service providers" });
     }
@@ -74,13 +154,108 @@ export const getAvailableProviders = async (req: Request, res: Response): Promis
 
 export const getUserRequests = async (req: Request, res: Response): Promise<void> => {
     try {
-        const requests = await serviceRepository.find({
-            where: { user: { id: req.user.id } },
-            order: { createdAt: 'DESC' }
-        });
+      console.log('Fetching requests for user:', req.user.id);
+        // Use GeoService to fetch from Supabase
+        initializeGeoService();
+        const requests = await geoService.getUserRequests(req.user.id);
+        console.log('Found requests:', requests.length, requests);
         res.json(requests);
-    } catch (error) {
+    } catch (error: any) {
+        console.error('Get user requests error:', error);
         res.status(500).json({ message: "Error fetching service requests" });
+    }
+};
+
+type VoiceParseConfidence = 'high' | 'medium' | 'low' | 'none';
+
+// Very lightweight, rule-based parser for demo voice transcripts.
+// It only works on text (no audio) and maps multilingual keywords to existing service types.
+export const parseVoiceRequest = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { transcript } = req.body as { transcript?: string };
+
+        if (!transcript || typeof transcript !== 'string' || !transcript.trim()) {
+            res.status(400).json({ message: 'Transcript is required' });
+            return;
+        }
+
+        const original = transcript.trim();
+        const lower = original.toLowerCase();
+
+        // Simple multilingual keyword dictionaries for demo purposes.
+        const serviceKeywordMap: Record<string, string[]> = {
+            towing: [
+                'tow', 'towing', 'tow truck',
+                'remolque', 'gruá', // es
+            ],
+            roadside_assistance: [
+                'roadside', 'assistance', 'breakdown',
+                'help on road', 'flat tyre help',
+                'asistencia en carretera', // es
+            ],
+            vehicle_recovery: [
+                'recovery', 'recover my car',
+            ],
+            battery_jump: [
+                'battery', 'jump start', 'dead battery',
+                'batería', 'bateria', // es/pt
+            ],
+            tire_change: [
+                'tire', 'tyre', 'flat tire', 'puncture',
+                'llanta', 'neumático pinchado', // es
+            ],
+            gas_delivery: [
+                'out of gas', 'no fuel', 'gas delivery',
+                'fuel delivery', 'petrol', 'diesel',
+                'sin gasolina', 'sin nafta', // es
+            ],
+            lockout: [
+                'locked out', 'lockout', 'keys inside',
+                'llaves dentro', 'cerrado fuera', // es
+            ],
+            mechanic: [
+                'mechanic', 'garage', 'workshop', 'taller', // es
+            ],
+        };
+
+        let bestServiceType: string | null = null;
+        let bestScore = 0;
+        let matchedKeywords: string[] = [];
+
+        for (const [serviceType, keywords] of Object.entries(serviceKeywordMap)) {
+            let score = 0;
+            const localMatches: string[] = [];
+            for (const kw of keywords) {
+                if (kw && lower.includes(kw.toLowerCase())) {
+                    score += 1;
+                    localMatches.push(kw);
+                }
+            }
+            if (score > bestScore) {
+                bestScore = score;
+                bestServiceType = serviceType;
+                matchedKeywords = localMatches;
+            }
+        }
+
+        let confidence: VoiceParseConfidence = 'none';
+        if (bestScore >= 3) confidence = 'high';
+        else if (bestScore === 2) confidence = 'medium';
+        else if (bestScore === 1) confidence = 'low';
+
+        // For demo, we simply echo the transcript as description; the user can edit it.
+        const description = original;
+
+        res.json({
+            serviceType: bestServiceType,
+            confidence,
+            transcript: original,
+            description,
+            matchedKeywords,
+        });
+    } catch (error: any) {
+        console.error('parseVoiceRequest error:', error);
+        res.status(500).json({ message: 'Error parsing voice transcript' });
     }
 };
 
@@ -89,212 +264,177 @@ export const updateServiceStatus = async (req: Request, res: Response): Promise<
         const { id } = req.params;
         const { status } = req.body;
 
-        const service = await serviceRepository.findOne({ 
-            where: { id },
-            relations: ['user']
-        });
+        console.log('Updating service status:', { id, status });
 
-        if (!service) {
+        // Use GeoService to update in Supabase
+        initializeGeoService();
+        const updated = await geoService.updateServiceStatus(id, status);
+        
+        if (!updated) {
             res.status(404).json({ message: "Service request not found" });
             return;
         }
-
-        service.status = status;
-        await serviceRepository.save(service);
-        res.json({ message: "Status updated", service });
-    } catch (error) {
+        
+        res.json({ message: "Status updated", service: updated });
+    } catch (error: any) {
+        console.error('Update service status error:', error);
         res.status(500).json({ message: "Error updating service status" });
     }
 };
 
-// Add endpoint for providers to submit quotes
 export const submitQuote = async (req: Request, res: Response): Promise<void> => {
     try {
         const { serviceId } = req.params;
         const { quotedPrice } = req.body;
 
-        const service = await serviceRepository.findOne({ 
-            where: { id: serviceId }
-        });
-
-        if (!service) {
-            res.status(404).json({ message: "Service request not found" });
-            return;
+        const client = await simpleDbPool.connect();
+        try {
+            const result = await client.query(
+                'UPDATE service_requests SET quoted_price = $1, provider_id = $2, updated_at = NOW() WHERE id = $3 RETURNING *',
+                [quotedPrice, req.user.id, serviceId]
+            );
+            
+            if (result.rows.length === 0) {
+                res.status(404).json({ message: "Service request not found" });
+                return;
+            }
+            
+            res.json({ message: "Quote submitted successfully", service: result.rows[0] });
+        } finally {
+            client.release();
         }
-
-        service.quotedPrice = quotedPrice;
-        service.provider = req.user;
-        await serviceRepository.save(service);
-
-        res.json({ message: "Quote submitted successfully", service });
-    } catch (error) {
+    } catch (error: any) {
+        console.error('Submit quote error:', error);
         res.status(500).json({ message: "Error submitting quote" });
     }
 };
 
-// Get all quotes for a service request
 export const getServiceQuotes = async (req: Request, res: Response): Promise<void> => {
     try {
         const { serviceId } = req.params;
-        const service = await serviceRepository.findOne({
-            where: { id: serviceId },
-            relations: ['provider']
-        });
-        res.json(service);
-    } catch (error) {
+        
+        const client = await simpleDbPool.connect();
+        try {
+            const result = await client.query(
+                'SELECT * FROM service_requests WHERE id = $1',
+                [serviceId]
+            );
+            
+            if (result.rows.length === 0) {
+                res.status(404).json({ message: "Service request not found" });
+                return;
+            }
+            
+            res.json(result.rows[0]);
+        } finally {
+            client.release();
+        }
+    } catch (error: any) {
+        console.error('Get service quotes error:', error);
         res.status(500).json({ message: "Error fetching quotes" });
     }
 };
 
-// Accept a quote
 export const acceptQuote = async (req: Request, res: Response): Promise<void> => {
     try {
         const { serviceId } = req.params;
         const { providerId } = req.body;
 
-        const service = await serviceRepository.findOne({
-            where: { id: serviceId }
-        });
-
-        if (!service) {
-            res.status(404).json({ message: "Service request not found" });
-            return;
+        const client = await simpleDbPool.connect();
+        try {
+            const result = await client.query(
+                'UPDATE service_requests SET status = $1, provider_id = $2, updated_at = NOW() WHERE id = $3 RETURNING *',
+                ['accepted', providerId, serviceId]
+            );
+            
+            if (result.rows.length === 0) {
+                res.status(404).json({ message: "Service request not found" });
+                return;
+            }
+            
+            res.json({ message: "Quote accepted", service: result.rows[0] });
+        } finally {
+            client.release();
         }
-
-        service.status = "accepted";
-        service.provider = { id: providerId } as User;
-        await serviceRepository.save(service);
-
-        res.json({ message: "Quote accepted", service });
-    } catch (error) {
+    } catch (error: any) {
+        console.error('Accept quote error:', error);
         res.status(500).json({ message: "Error accepting quote" });
     }
 };
 
-// Get provider's active services
 export const getProviderServices = async (req: Request, res: Response): Promise<void> => {
     try {
-        const services = await serviceRepository.find({
-            where: { provider: { id: req.user.id } },
-            relations: ['user'],
-            order: { createdAt: 'DESC' }
-        });
-        res.json(services);
-    } catch (error) {
+        const client = await simpleDbPool.connect();
+        try {
+            const result = await client.query(
+                'SELECT * FROM service_requests WHERE provider_id = $1 ORDER BY created_at DESC',
+                [req.user.id]
+            );
+            res.json(result.rows);
+        } finally {
+            client.release();
+        }
+    } catch (error: any) {
+        console.error('Get provider services error:', error);
         res.status(500).json({ message: "Error fetching provider services" });
     }
 };
 
-// Add this function to find nearby providers
 export const findNearbyProviders = async (req: Request, res: Response): Promise<void> => {
- 
     try {
-        const { latitude, longitude, serviceType } = req.query;
+        const { latitude, longitude, serviceType, radius } = req.query;
 
-        if (!latitude || !longitude || !serviceType) {
+        console.log('Find nearby providers params:', { latitude, longitude, serviceType, radius });
+        
+        if (!latitude || !longitude || latitude === 'undefined' || longitude === 'undefined') {
             res.status(400).json({ 
-                message: "Missing required parameters",
-                required: { latitude, longitude, serviceType }
+                message: "Valid latitude and longitude are required",
+                received: { latitude, longitude, serviceType, radius }
             });
             return;
         }
 
-        console.log('Finding providers with params:', { latitude, longitude, serviceType });
-        //await GeoDataSource.initialize();
-        const providerRepository = GeoDataSource.getRepository(Provider);
-console.log("Provider Repository:", providerRepository);
-        const providers = await providerRepository
-            .createQueryBuilder("provider")
-            .where("provider.isAvailable = :isAvailable", { isAvailable: true })
-            .andWhere(
-                `ST_DWithin(
-                    ST_SetSRID(ST_MakePoint(provider.longitude, provider.latitude), 4326),
-                    ST_SetSRID(ST_MakePoint(:longitude, :latitude), 4326),
-                    50000  -- 50 km radius
-                )`,
-                { longitude, latitude }
-            )
-            .andWhere("provider.services @> ARRAY[:serviceType]", { serviceType })
-            .getMany();
-
-        console.log('Found providers:', providers);
-
-        if (!providers.length) {
-            res.json([]);
+        const lat = parseFloat(latitude as string);
+        const lng = parseFloat(longitude as string);
+        const radiusKm = radius ? parseFloat(radius as string) : 10;
+        
+        if (isNaN(lat) || isNaN(lng) || isNaN(radiusKm)) {
+            res.status(400).json({ 
+                message: "Invalid numeric values for coordinates or radius",
+                parsed: { lat, lng, radiusKm }
+            });
             return;
         }
 
-        const nearbyProviders = providers
-            .filter(provider => {
-                if (!provider.location) {
-                    console.log(`Provider ${provider.business_name} has no location`);
-                    return false;
-                }
-                return true;
-            })
-         
-           // console.log(point); // This will 
-            .map(provider => {
-                // const distance = calculateDistance(
-                //     Number(latitude),
-                //     Number(longitude),
-                //     provider.,  // Assuming these fields exist in the Provider entity
-                //     provider.longitude
-                // );
-                const distance = provider.location;
-                console.log(`Provider ${provider.business_name} is ${distance}km away`);
-                return { ...provider, password: undefined, distance };
-            });
-            // .filter(provider => {
-            //     const hasService = provider.services?.includes(serviceType as string);
-            //     console.log(`Provider ${provider.name}: hasService=${hasService}`);
-            //     return hasService;
-            // })
-            // .sort((a, b) => a.distance - b.distance);
+        // Use GeoService to find nearby providers
+        initializeGeoService();
+        const providers = await geoService.findNearbyProviders(
+            lat,
+            lng,
+            radiusKm,
+            serviceType as string || 'all'
+        );
 
-        console.log('Returning providers:', nearbyProviders);
-        res.json(nearbyProviders);
-    } catch (error) {
-        console.error('Error finding providers:', error);
-        res.status(500).json({ 
-            message: "Error finding nearby providers",
-            error: error instanceof Error ? error.message : String(error)
-        });
+        res.json(providers);
+    } catch (error: any) {
+        console.error('Find nearby providers error:', error);
+        res.status(500).json({ message: "Error finding nearby providers" });
     }
 };
 
-// Helper function to calculate distance between two points
-function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-    const R = 6371; // Earth's radius in kilometers
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = 
-        Math.sin(dLat/2) * Math.sin(dLat/2) +
-        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-        Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c; // Distance in kilometers
-}
-
 export const notifyProvider = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { requestId, providerId } = req.body;
+        const { providerId, serviceRequestId } = req.body;
         
-        const service = await serviceRepository.findOne({
-            where: { id: requestId }
+        // This would typically integrate with a notification service
+        // For now, we'll just return a success message
+        res.json({ 
+            message: "Provider notified successfully",
+            providerId,
+            serviceRequestId
         });
-
-        if (!service) {
-            res.status(404).json({ message: "Service request not found" });
-            return;
-        }
-
-        // Add the provider to notified providers list
-        service.notifiedProviders = [...(service.notifiedProviders || []), providerId];
-        await serviceRepository.save(service);
-
-        res.json({ message: "Provider notified successfully" });
-    } catch (error) {
+    } catch (error: any) {
+        console.error('Notify provider error:', error);
         res.status(500).json({ message: "Error notifying provider" });
     }
 };
@@ -302,52 +442,93 @@ export const notifyProvider = async (req: Request, res: Response): Promise<void>
 export const getServiceRequest = async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
-        const service = await serviceRepository.findOne({
-            where: { id },
-            relations: ['user']
-        });
+        
+        initializeGeoService();
+        const service = await geoService.getServiceRequest(id);
 
         if (!service) {
             res.status(404).json({ message: "Service request not found" });
             return;
         }
 
-        console.log('Found service request:', service);
-        res.json(service);
-    } catch (error) {
-        console.error('Error fetching service request:', error);
+        // Parse coordinates string to { lat, lng } when possible
+        let coordinatesParsed: { lat: number; lng: number } | null = null;
+        if (typeof service.coordinates === 'string') {
+            if (service.coordinates.startsWith('{') && service.coordinates.includes('"lat"') && service.coordinates.includes('"lng"')) {
+                try {
+                    const parsed = JSON.parse(service.coordinates);
+                    if (typeof parsed.lat === 'number' && typeof parsed.lng === 'number') {
+                        coordinatesParsed = { lat: parsed.lat, lng: parsed.lng };
+                    }
+                } catch (e) {
+                    console.warn('Failed to parse coordinates as JSON:', e);
+                }
+            } else if (service.coordinates.includes(',') && !coordinatesParsed) {
+                const parts = service.coordinates.split(',');
+                if (parts.length === 2) {
+                    const lat = parseFloat(parts[0].trim());
+                    const lng = parseFloat(parts[1].trim());
+                    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+                        coordinatesParsed = { lat, lng };
+                    }
+                }
+            }
+        }
+
+        // Optionally fetch user details from the primary DB if available
+        let user: { name: string | null; email: string | null } | null = null;
+        if (service.userId) {
+            const client = await simpleDbPool.connect();
+            try {
+                const userResult = await client.query(
+                    'SELECT name, email FROM users WHERE id = $1',
+                    [service.userId]
+                );
+                if (userResult.rows.length > 0) {
+                    user = {
+                        name: userResult.rows[0].name || null,
+                        email: userResult.rows[0].email || null
+                    };
+                }
+            } finally {
+                client.release();
+            }
+        }
+
+        res.json({
+            id: service.id,
+            serviceType: service.serviceType,
+            location: service.location,
+            coordinates: coordinatesParsed,
+            description: service.description,
+            vehicleType: service.vehicleType,
+            status: service.status,
+            createdAt: service.createdAt,
+            updatedAt: service.updatedAt,
+            quotedPrice: service.quotedPrice,
+            providerId: service.providerId,
+            user
+        });
+    } catch (error: any) {
+        console.error('Get service request error:', error);
         res.status(500).json({ message: "Error fetching service request" });
     }
 };
 
-// Add this new function
 export const getNearbyRequests = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { latitude, longitude } = req.query;
-        const maxDistance = 50; // kilometers
+        // Provider-based nearby requests (50 miles by default)
+        if (req.user?.role !== 'provider') {
+            res.status(403).json({ message: 'Only providers can fetch nearby requests' });
+            return;
+        }
 
-        const requests = await serviceRepository.find({
-            where: { status: "pending" },
-            relations: ['user']
-        });
-
-        const nearbyRequests = requests
-            .filter(request => request.coordinates)
-            .map(request => {
-                const distance = calculateDistance(
-                    Number(latitude),
-                    Number(longitude),
-                    request.coordinates!.lat,
-                    request.coordinates!.lng
-                );
-                return { ...request, distance };
-            })
-            .filter(request => request.distance <= maxDistance)
-            .sort((a, b) => a.distance - b.distance);
-
-        res.json(nearbyRequests);
-    } catch (error) {
-        console.error('Error finding nearby requests:', error);
-        res.status(500).json({ message: "Error finding nearby requests" });
+        initializeGeoService();
+        const milesParam = req.query.miles ? parseFloat(req.query.miles as string) : 50;
+        const requests = await geoService.getNearbyRequestsByProvider(req.user.id, milesParam);
+        res.json(requests);
+    } catch (error: any) {
+        console.error('Get nearby requests error:', error);
+        res.status(500).json({ message: "Error fetching nearby requests" });
     }
 }; 

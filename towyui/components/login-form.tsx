@@ -62,10 +62,10 @@ export function LoginForm() {
   }
 
   return (
-    <div className="w-full max-w-md mx-auto space-y-8">
+    <div className="w-full max-w-sm md:max-w-md mx-auto space-y-6 md:space-y-8">
       <div className="text-center">
-        <h2 className="text-2xl font-bold">Login</h2>
-        <p className="text-gray-600 mt-2">Enter your credentials to access your account</p>
+        <h2 className="text-xl md:text-2xl font-bold">Login</h2>
+        <p className="text-gray-600 mt-2 text-sm md:text-base">Enter your credentials to access your account</p>
       </div>
 
       <form onSubmit={onSubmit} className="space-y-4">
